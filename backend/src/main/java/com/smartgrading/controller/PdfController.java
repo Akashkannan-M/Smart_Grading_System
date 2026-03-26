@@ -4,8 +4,8 @@ import com.lowagie.text.*;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import com.smartgrading.entity.Mark;
+import com.smartgrading.entity.User;
 import com.smartgrading.repository.MarkRepository;
-import com.smartgrading.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,85 +13,112 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/pdf")
+@CrossOrigin(origins = "*")
 public class PdfController {
 
     @Autowired
     private MarkRepository markRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
     @GetMapping("/download")
-    public ResponseEntity<byte[]> downloadPdf(@RequestParam String type) {
+    public ResponseEntity<byte[]> downloadPdf(@RequestParam(required = false) String type) {
         try {
-            Mark.ExamType examType = Mark.ExamType.valueOf(type.toUpperCase());
-            List<Mark> marksList = markRepository.findByExamType(examType);
+            java.util.List<Mark> allMarks = markRepository.findAll();
+            
+            // Map to hold Student -> Performance Map
+            Map<User, java.util.List<Mark>> studentMarks = allMarks.stream()
+                    .collect(Collectors.groupingBy(Mark::getStudent));
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            Document document = new Document(PageSize.A4);
+            Document document = new Document(PageSize.A4.rotate());
             PdfWriter.getInstance(document, baos);
 
             document.open();
             Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18);
-            Paragraph title = new Paragraph("Academic Report - " + type, titleFont);
+            Paragraph title = new Paragraph("Smart Grading System - Final Grade Sheet", titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
             document.add(new Paragraph(" "));
 
-            PdfPTable table = new PdfPTable(5);
+            PdfPTable table = new PdfPTable(7);
             table.setWidthPercentage(100);
-            table.addCell("Rank");
-            table.addCell("Register No");
-            table.addCell("Student Name");
-            table.addCell("Marks");
-            table.addCell("Status");
+            table.addCell("Register Name");
+            table.addCell("CIA 1 (60)");
+            table.addCell("CIA 2 (60)");
+            table.addCell("MODEL (100)");
+            table.addCell("TOTAL (220)");
+            table.addCell("AVG %");
+            table.addCell("RANK");
 
-            // Sort marks by value descending for ranking
-            marksList.sort(Comparator.comparingInt(Mark::getMarks).reversed());
+            java.util.List<StudentSummary> summaries = new ArrayList<>();
+            for (User student : studentMarks.keySet()) {
+                java.util.List<Mark> marks = studentMarks.get(student);
+                int c1 = getMarkValue(marks, Mark.ExamType.CIA1);
+                int c2 = getMarkValue(marks, Mark.ExamType.CIA2);
+                int md = getMarkValue(marks, Mark.ExamType.MODEL);
+                int total = c1 + c2 + md;
+                double avg = (total / 220.0) * 100.0;
+                summaries.add(new StudentSummary(student.getName(), c1, c2, md, total, avg));
+            }
 
-            int totalMarks = 0;
-            int passCount = 0;
-            for (int i = 0; i < marksList.size(); i++) {
-                Mark m = marksList.get(i);
+            summaries.sort(Comparator.comparingInt(StudentSummary::getTotal).reversed());
+
+            int passedStudents = 0;
+            double totalClassAvg = 0;
+
+            for (int i = 0; i < summaries.size(); i++) {
+                StudentSummary s = summaries.get(i);
+                table.addCell(s.name);
+                table.addCell(String.valueOf(s.c1));
+                table.addCell(String.valueOf(s.c2));
+                table.addCell(String.valueOf(s.md));
+                table.addCell(String.valueOf(s.total));
+                table.addCell(String.format("%.1f", s.avg) + "%");
                 table.addCell(String.valueOf(i + 1));
-                table.addCell(m.getStudent().getUsername());
-                table.addCell(m.getStudent().getName());
-                table.addCell(String.valueOf(m.getMarks()));
-                
-                int maxMark = (examType == Mark.ExamType.MODEL) ? 100 : 60;
-                int passMark = maxMark / 2;
-                boolean isPass = m.getMarks() >= passMark;
-                table.addCell(isPass ? "PASS" : "FAIL");
 
-                totalMarks += m.getMarks();
-                if (isPass) passCount++;
+                // PASS RULES: 30, 30, 45
+                if (s.c1 >= 30 && s.c2 >= 30 && s.md >= 45) passedStudents++;
+                totalClassAvg += s.avg;
             }
 
             document.add(table);
             document.add(new Paragraph(" "));
 
-            if (!marksList.isEmpty()) {
-                double average = (double) totalMarks / marksList.size();
-                double passPercent = ((double) passCount / marksList.size()) * 100;
-
-                document.add(new Paragraph("Class Average: " + String.format("%.2f", average)));
-                document.add(new Paragraph("Pass Percentage: " + String.format("%.2f", passPercent) + "%"));
+            if (!summaries.isEmpty()) {
+                double avgClass = totalClassAvg / summaries.size();
+                double passRate = (passedStudents * 100.0) / summaries.size();
+                document.add(new Paragraph("FINAL ANALYTICS:"));
+                document.add(new Paragraph("Total Student Count: " + summaries.size()));
+                document.add(new Paragraph("Overall Class Average: " + String.format("%.2f", avgClass) + "%"));
+                document.add(new Paragraph("Class Pass Percentage: " + String.format("%.2f", passRate) + "%"));
             }
 
             document.close();
-
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("filename", "report_" + type + ".pdf");
-
+            headers.setContentDispositionFormData("filename", "final_report.pdf");
             return ResponseEntity.ok().headers(headers).body(baos.toByteArray());
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(null);
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
         }
+    }
+
+    private int getMarkValue(java.util.List<Mark> marks, Mark.ExamType type) {
+        return marks.stream().filter(m -> m.getExamType() == type).map(Mark::getMarks).findFirst().orElse(0);
+    }
+
+    private static class StudentSummary {
+        String name;
+        int c1, c2, md, total;
+        double avg;
+        StudentSummary(String n, int c1, int c2, int md, int t, double a) {
+            this.name = n; this.c1 = c1; this.c2 = c2; this.md = md; this.total = t; this.avg = a;
+        }
+        int getTotal() { return total; }
     }
 }

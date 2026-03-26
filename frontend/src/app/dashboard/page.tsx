@@ -5,325 +5,256 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
-  const [examType, setExamType] = useState("CIA1");
-  const [year, setYear] = useState("1st Year");
-  
-  // Data States
+  const [examType, setExamType] = useState<string>("CIA1");
   const [students, setStudents] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [marks, setMarks] = useState<any[]>([]);
-  const [staffMarkInputs, setStaffMarkInputs] = useState<Record<string, number>>({});
+  const [staffInputs, setStaffInputs] = useState<Record<string, number>>({});
   const [isClient, setIsClient] = useState(false);
+  const [activeTab, setActiveTab] = useState<"MY_MARKS" | "CLASS_RANKING">("MY_MARKS");
+  const [showProfile, setShowProfile] = useState(false);
 
   const router = useRouter();
 
   useEffect(() => {
     setIsClient(true);
-    const usr = localStorage.getItem("user");
-    if (!usr) {
-      router.push("/login");
-    } else {
-      setUser(JSON.parse(usr));
-    }
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) router.push("/login");
+    else setUser(JSON.parse(storedUser));
   }, [router]);
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
-  }, [user, examType]);
+    if (user) fetchData();
+  }, [user]);
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const headers = { "Authorization": `Bearer ${token}` };
+      const headers = { "Authorization": `Bearer ${localStorage.getItem('token')}` };
+      const [stdRes, subRes, mrkRes] = await Promise.all([
+        fetch("http://localhost:8080/api/marks/students", { headers }),
+        fetch("http://localhost:8080/api/marks/subjects", { headers }),
+        fetch("http://localhost:8080/api/marks/all", { headers })
+      ]);
 
-      // Fetch Subjects
-      const subRes = await fetch("http://localhost:8080/api/marks/subjects", { headers });
-      if (subRes.ok) setSubjects(await subRes.json());
-
-      // Fetch Students
-      const stdRes = await fetch("http://localhost:8080/api/marks/students", { headers });
       if (stdRes.ok) setStudents(await stdRes.json());
-
-      // Fetch Marks dynamically based on Role
-      if (user.role === 'STUDENT') {
-        const mrkRes = await fetch(`http://localhost:8080/api/marks/student/${user.id}`, { headers });
-        if (mrkRes.ok) setMarks(await mrkRes.json());
-      } else {
-        const mrkRes = await fetch("http://localhost:8080/api/marks/all", { headers });
-        if (mrkRes.ok) setMarks(await mrkRes.json());
-      }
-    } catch(e) {
-      console.error(e);
+      if (subRes.ok) setSubjects(await subRes.json());
+      if (mrkRes.ok) setMarks(await mrkRes.json());
+    } catch (e) {
+      console.error("Fetch Error:", e);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    router.push("/login");
-  };
+  const handleSaveMarks = async () => {
+    const assignedSub = subjects.find(s => s.staff && s.staff.id === user.id);
+    if (!assignedSub) return alert("Error: No assigned subject.");
 
-  const submitMarks = async () => {
-    const subject = subjects.find(s => s.staff && s.staff.id === user.id);
-    if (!subject) {
-      alert("You are not assigned to any subject.");
-      return;
-    }
-
-    const payload = Object.keys(staffMarkInputs).map(studentIdStr => {
-      const markValue = staffMarkInputs[studentIdStr];
-      // Validation on Frontend too
-      const maxMark = (examType === 'MODEL') ? 100 : 60;
-      if (markValue > maxMark) {
-        throw new Error(`Marks for exam ${examType} cannot exceed ${maxMark}`);
-      }
-      return {
-        studentId: parseInt(studentIdStr),
-        subjectId: subject.id,
-        examType: examType,
-        marks: markValue
-      };
-    });
+    const payload = Object.keys(staffInputs).map(id => ({
+      studentId: parseInt(id),
+      subjectId: assignedSub.id,
+      examType: examType,
+      marks: staffInputs[id]
+    }));
 
     try {
       const res = await fetch("http://localhost:8080/api/marks", {
         method: "POST",
         headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem('token')}`
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem('token')}` 
         },
         body: JSON.stringify(payload)
       });
-      if(res.ok) {
-        alert("Marks saved successfully!");
+      if (res.ok) {
+        alert("Mark entry successful!");
         fetchData();
-      } else {
-        const errorText = await res.text();
-        alert("Error: " + errorText);
-      }
-    } catch (e: any) {
-      alert(e.message || "Failed to save marks.");
+      } else alert(await res.text());
+    } catch (e) {
+      alert("Persistence Failure.");
     }
   };
+
+  if (!isClient || !user) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Hub...</div>;
+
+  // AGGREGATION LOGIC (Real-time Calculation)
+  const rankingList = students.map(std => {
+    const stdMarks = marks.filter(m => m.studentId === std.id);
+    const cia1 = stdMarks.find(m => m.examType === "CIA1")?.marks || 0;
+    const cia2 = stdMarks.find(m => m.examType === "CIA2")?.marks || 0;
+    const model = stdMarks.find(m => m.examType === "MODEL")?.marks || 0;
+    const finalTotal = cia1 + cia2 + model;
+    const isMainPass = cia1 >= 30 && cia2 >= 30 && model >= 45;
+    return { ...std, cia1, cia2, model, finalTotal, isMainPass };
+  });
+
+  // Global ranking sorted by Final Total
+  rankingList.sort((a, b) => b.finalTotal - a.finalTotal);
+
+  // Statistics for Current Exam View
+  const currentExamMarks = marks.filter(m => m.examType === examType);
+  const avgMarks = currentExamMarks.length > 0 
+    ? (currentExamMarks.reduce((a, b) => a + b.marks, 0) / currentExamMarks.length).toFixed(1) 
+    : "0.0";
+  const passPercent = currentExamMarks.length > 0 
+    ? ((currentExamMarks.filter(m => m.isPass).length / currentExamMarks.length) * 100).toFixed(1) 
+    : "0.0";
+
+  const me = rankingList.find(s => s.id === user.id);
+  const myRank = rankingList.findIndex(s => s.id === user.id) + 1;
 
   const downloadPdf = async () => {
-    try {
-      const res = await fetch(`http://localhost:8080/api/pdf/download?type=${examType}`, {
+    const res = await fetch("http://localhost:8080/api/pdf/download", {
         headers: { "Authorization": `Bearer ${localStorage.getItem('token')}` }
-      });
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${examType}_results.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch(err) {
-      console.error(err);
-    }
+    });
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "Final_Report_Card.pdf";
+    document.body.appendChild(link);
+    link.click();
   };
-  
-  if (!isClient || !user) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Dashboard...</div>;
-
-  // Role Filtering for Data Visibility
-  let filteredStudents = students;
-  if (user.role === 'CC') {
-    // Current Coordinator only sees their class (simulated with filtering first 15 for demo if real mapping not present)
-    // In a real system, you'd filter by user.classID or similar.
-    // For now, assume all demo students are under CC.
-  }
-  if (user.role === 'STUDENT') {
-    filteredStudents = students.filter(s => s.id === user.id);
-  }
-
-  // Process and sort rankings for HOD / CC / STAFF / STUDENT (All students)
-  let allProcessed = students.map((std) => {
-    const stdMarks = marks.filter(m => m.student.id === std.id && m.examType === examType);
-    const total = stdMarks.reduce((acc, curr) => acc + curr.marks, 0);
-    const maxPossible = examType === 'MODEL' ? 100 : 60;
-    const passThreshold = maxPossible / 2;
-    const isFail = stdMarks.length > 0 && stdMarks.some(m => m.marks < passThreshold);
-    return { ...std, total, isFail, marksCount: stdMarks.length };
-  });
-
-  // Calculate Rankings across ALL students
-  allProcessed.sort((a, b) => b.total - a.total);
-
-  // Statistics across the whole set
-  let totalAcrossClass = 0;
-  let studentsWithMarks = 0;
-  let passCount = 0;
-
-  allProcessed.forEach(s => {
-    if (s.marksCount > 0) {
-      totalAcrossClass += s.total;
-      studentsWithMarks++;
-      if (!s.isFail) passCount++;
-    }
-  });
-
-  const classAverage = studentsWithMarks > 0 ? (totalAcrossClass / studentsWithMarks).toFixed(1) : "0";
-  const passPercentage = studentsWithMarks > 0 ? ((passCount / studentsWithMarks) * 100).toFixed(1) : "0";
-
-  const getRankBadge = (index: number) => {
-    if (index === 0) return "🥇 Gold";
-    if (index === 1) return "🥈 Silver";
-    if (index === 2) return "🥉 Bronze";
-    return index + 1;
-  };
-
-  // Visibility logic for the list displayed
-  const displayList = user.role === 'STUDENT' ? allProcessed.filter(s => s.id === user.id) : allProcessed;
 
   return (
-    <div className="dashboard-container">
-      <div className="sidebar" style={{ minWidth: '220px' }}>
-        <div className="sidebar-title" style={{ fontSize: '1.3rem' }}>Smart Grading</div>
+    <div className="dashboard-container" style={{ position: 'relative' }}>
+      <div className="sidebar">
+        <div className="sidebar-title">Sudharsan Grading</div>
         
-        {user.role === 'HOD' && (
-          <div style={{ marginBottom: '2rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>Filter Year:</label>
-            <select 
-              value={year} 
-              onChange={(e) => setYear(e.target.value)}
-              className="input-field"
-              style={{ marginTop: '0.3rem' }}
-            >
-              <option>1st Year</option>
-              <option>2nd Year</option>
-              <option>3rd Year</option>
-              <option>4th Year</option>
-            </select>
-          </div>
-        )}
-
-        <div className="nav-item" onClick={() => router.push("/dashboard/profile")}>
-          Profile
-        </div>
-
+        <div className={`nav-item ${examType === "CIA1" ? "active" : ""}`} onClick={() => setExamType("CIA1")}>CIA 1 (Max 60)</div>
+        <div className={`nav-item ${examType === "CIA2" ? "active" : ""}`} onClick={() => setExamType("CIA2")}>CIA 2 (Max 60)</div>
+        <div className={`nav-item ${examType === "MODEL" ? "active" : ""}`} onClick={() => setExamType("MODEL")}>Model (Max 100)</div>
+        
         <div style={{ marginTop: 'auto' }}>
-          <div className="nav-item" onClick={handleLogout} style={{ color: 'var(--error)' }}>
-            Logout
-          </div>
+            <div className="nav-item" onClick={() => { localStorage.clear(); router.push("/login"); }} style={{ color: 'var(--error)' }}>Sign Out</div>
         </div>
       </div>
 
       <div className="main-content">
         <div className="topbar">
-          <h2 style={{ margin: 0, color: 'var(--primary-color)' }}>{examType} Dashboard</h2>
+          <h2 style={{ color: 'var(--primary-color)' }}>{examType} Analysis View</h2>
           
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div className="top-tabs">
-              <button className={`tab-btn ${examType === 'CIA1' ? 'active' : ''}`} onClick={() => setExamType('CIA1')}>CIA1</button>
-              <button className={`tab-btn ${examType === 'CIA2' ? 'active' : ''}`} onClick={() => setExamType('CIA2')}>CIA2</button>
-              <button className={`tab-btn ${examType === 'MODEL' ? 'active' : ''}`} onClick={() => setExamType('MODEL')}>Model</button>
+          <div style={{ position: 'relative' }}>
+            <div className="profile-card" onClick={() => setShowProfile(!showProfile)}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 600 }}>{user.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>{user.role}</div>
+              </div>
+              <div className="avatar">{user.name.charAt(0)}</div>
             </div>
 
-            <div className="profile-card" style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '1.5rem', cursor: 'pointer' }} onClick={() => router.push("/dashboard/profile")}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{user.name} ({user.role})</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', textTransform: 'uppercase' }}>
-                  {user.department}
-                </div>
+            {showProfile && (
+              <div style={{ position: 'absolute', top: '100%', right: '0', background: 'white', border: '1px solid #ddd', borderRadius: '8px', padding: '1rem', zIndex: 100, minWidth: '200px', marginTop: '0.5rem', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                 <div style={{ fontWeight: 600, borderBottom: '1px solid #eee', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>User Profile</div>
+                 <div style={{ fontSize: '0.85rem' }}>
+                    <p style={{ margin: '4px 0' }}>💡 Name: {user.name}</p>
+                    <p style={{ margin: '4px 0' }}>💼 Role: {user.role}</p>
+                    <p style={{ margin: '4px 0' }}>🏛 Dept: {user.department}</p>
+                 </div>
+                 <button onClick={() => setShowProfile(false)} style={{ marginTop: '1rem', width: '100%', padding: '0.4rem', borderRadius: '4px', background: '#f5f5f5', border: '1px solid #ddd', cursor: 'pointer' }}>Close Modal</button>
               </div>
-              <div className="avatar">
-                {user.name.charAt(0)}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
         <div className="stats-grid">
           <div className="stat-card">
-            <div style={{ color: 'var(--text-light)', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600 }}>
-              {user.role === 'STUDENT' ? 'MY TOTAL MARKS' : 'CLASS AVERAGE'}
-            </div>
-            <div className="stat-value">
-              {user.role === 'STUDENT' ? (allProcessed.find(s => s.id === user.id)?.total || 0) : classAverage}
-              {user.role !== 'STUDENT' && '%'}
-            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>{user.role === "STUDENT" ? "MY GLOBAL RANK" : "CLASS AVERAGE"}</div>
+            <div className="stat-value">{user.role === "STUDENT" ? `#${myRank}` : `${avgMarks}`}</div>
           </div>
-
           <div className="stat-card">
-            <div style={{ color: 'var(--text-light)', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600 }}>
-              {user.role === 'STUDENT' ? 'MY CURRENT RANK' : 'PASS PERCENTAGE'}
-            </div>
-            <div className="stat-value" style={{ color: 'var(--success)' }}>
-              {user.role === 'STUDENT' ? (allProcessed.findIndex(s => s.id === user.id) + 1) : (passPercentage + '%')}
-            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>{user.role === "STUDENT" ? "AGGREGATE TOTAL" : "PASS PERCENTAGE"}</div>
+            <div className="stat-value" style={{ color: 'var(--success)' }}>{user.role === "STUDENT" ? `${me?.finalTotal}/220` : `${passPercent}%`}</div>
           </div>
-
-          {(user.role === 'HOD' || user.role === 'CC' || user.role === 'STAFF') && (
-            <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <button className="btn-primary" onClick={downloadPdf}>
-                Download Subject PDF
-              </button>
-            </div>
-          )}
-
-          {user.role === 'STAFF' && (
-            <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <button className="btn-primary" onClick={submitMarks} style={{ backgroundColor: 'var(--warning)', color: 'white' }}>
-                Update & Save Database
-              </button>
-            </div>
-          )}
+          <div className="stat-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button className="btn-primary" onClick={downloadPdf}>Download Final Report</button>
+          </div>
         </div>
 
-        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '0.75rem', overflowX: 'auto' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '1.25rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
-             {user.role === 'STAFF' ? 'Input Performance Data' : 'Live Academic Rankings'}
-          </h3>
-          
-          <table style={{ minWidth: '700px' }}>
+        {user.role === "STUDENT" && (
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                <button 
+                  onClick={() => setActiveTab("MY_MARKS")}
+                  style={{ padding: '0.5rem 1.5rem', borderRadius: '4px', border: 'none', background: activeTab === "MY_MARKS" ? 'var(--primary-color)' : '#ddd', color: activeTab === "MY_MARKS" ? 'white' : 'black', cursor: 'pointer', fontWeight: 600 }}
+                >My Subject Marks</button>
+                <button 
+                  onClick={() => setActiveTab("CLASS_RANKING")}
+                  style={{ padding: '0.5rem 1.5rem', borderRadius: '4px', border: 'none', background: activeTab === "CLASS_RANKING" ? 'var(--primary-color)' : '#ddd', color: activeTab === "CLASS_RANKING" ? 'white' : 'black', cursor: 'pointer', fontWeight: 600 }}
+                >Global Class Ranking</button>
+            </div>
+        )}
+
+        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>
+                {user.role === "STAFF" ? `Update Performance: ${examType}` : 
+                 activeTab === "MY_MARKS" ? "My Personal Academic Score" : "Global Leaderboard"}
+            </h3>
+            {user.role === "STAFF" && <button className="btn-primary" onClick={handleSaveMarks} style={{ padding: '0.4rem 1rem', background: 'var(--warning)' }}>Confirm Marks Persistence</button>}
+          </div>
+
+          <table>
             <thead>
               <tr>
-                <th>Rank</th>
+                <th>{activeTab === "MY_MARKS" && user.role === "STUDENT" ? "Subject" : "Rank"}</th>
                 <th>Register No.</th>
                 <th>Name</th>
-                {user.role === 'STAFF' ? <th>Marks (Max: {examType === 'MODEL' ? '100' : '60'})</th> : <th>Marks Scored</th>}
-                {user.role !== 'STAFF' && <th>Pass Status</th>}
+                <th>{user.role === "STAFF" ? "Input Marks" : "Score"}</th>
+                <th>{user.role === "STAFF" ? "Threshold" : "Status"}</th>
               </tr>
             </thead>
             <tbody>
-              {displayList.map((student, idx) => {
-                const globalIdx = allProcessed.findIndex(s => s.id === student.id);
-                const isMe = user.role === 'STUDENT';
-                
-                return (
-                  <tr key={student.id} className={(user.role !== 'STAFF' && student.isFail) ? 'highlight-fail' : (user.id === student.id && user.role === 'STUDENT') ? 'highlight-student' : ''}>
-                    <td style={{ fontWeight: globalIdx <= 2 ? 600 : 400 }}>
-                      {getRankBadge(globalIdx)}
-                    </td>
-                    <td>{student.username}</td>
-                    <td>{student.name} {user.id === student.id && "(You)"}</td>
-                    
-                    {user.role === 'STAFF' ? (
-                      <td>
-                        <input 
-                          type="number" 
-                          min="0" max={examType === 'MODEL' ? 100 : 60}
-                          title="Marks"
-                          style={{ width: '80px', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                          value={staffMarkInputs[student.id] || ''}
-                          onChange={(e) => setStaffMarkInputs({...staffMarkInputs, [student.id]: parseInt(e.target.value)})}
-                        />
-                      </td>
-                    ) : (
-                      <td style={{ fontWeight: 600 }}>{student.total > 0 ? student.total : 'N/A'}</td>
-                    )}
-
-                    {user.role !== 'STAFF' && (
-                      <td className={student.isFail ? "status-fail" : "status-pass"}>
-                        {student.total > 0 ? (student.isFail ? "FAIL" : "PASS") : "NO DATA"}
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
+              {/* Table logic based on role and tab */}
+              {(user.role === "STUDENT" && activeTab === "MY_MARKS") ? (
+                  rankingList.filter(s => s.id === user.id).map(s => (
+                    <tr key={s.id} className="highlight-student">
+                       <td>CORE CSE</td>
+                       <td>{s.username}</td>
+                       <td>{s.name}</td>
+                       <td>{examType === "CIA1" ? s.cia1 : examType === "CIA2" ? s.cia2 : s.model}</td>
+                       <td className={
+                           (examType === "CIA1" && s.cia1 >= 30) || 
+                           (examType === "CIA2" && s.cia2 >= 30) ||
+                           (examType === "MODEL" && s.model >= 45) ? "status-pass" : "status-fail"
+                       }>
+                           {(examType === "CIA1" && s.cia1 >= 30) || 
+                            (examType === "CIA2" && s.cia2 >= 30) ||
+                            (examType === "MODEL" && s.model >= 45) ? "PASS" : "FAIL"}
+                       </td>
+                    </tr>
+                  ))
+              ) : (
+                  rankingList.map((s, idx) => (
+                    <tr key={s.id} className={user.id === s.id ? "highlight-student" : ""}>
+                        <td>{idx + 1}</td>
+                        <td>{s.username}</td>
+                        <td>{s.name}</td>
+                        <td>
+                            {user.role === "STAFF" ? (
+                                <input 
+                                  type="number" 
+                                  title="Enter Marks"
+                                  placeholder="0-100"
+                                  style={{ width: '80px', padding: '0.4rem', border: '1px solid #ccc', borderRadius: '4px' }}
+                                  value={staffInputs[s.id] || ""}
+                                  onChange={(e) => setStaffInputs({...staffInputs, [s.id]: parseInt(e.target.value)})}
+                                />
+                            ) : (
+                                <b>{examType === "CIA1" ? s.cia1 : examType === "CIA2" ? s.cia2 : s.model}</b>
+                            )}
+                        </td>
+                        <td className={
+                           (examType === "CIA1" && s.cia1 >= 30) || 
+                           (examType === "CIA2" && s.cia2 >= 30) ||
+                           (examType === "MODEL" && s.model >= 45) ? "status-pass" : "status-fail"
+                        }>
+                            {user.role === "STAFF" ? 
+                                `Limit: ${examType === "MODEL" ? 100 : 60}` : 
+                                ((examType === "CIA1" && s.cia1 >= 30) || 
+                                 (examType === "CIA2" && s.cia2 >= 30) ||
+                                 (examType === "MODEL" && s.model >= 45) ? "PASS" : "FAIL")}
+                        </td>
+                    </tr>
+                  ))
+              )}
             </tbody>
           </table>
         </div>
