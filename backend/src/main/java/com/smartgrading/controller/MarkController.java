@@ -29,6 +29,17 @@ public class MarkController {
     @PostMapping
     public ResponseEntity<?> saveMarks(@RequestBody List<MarkDTO> marksList) {
         for (MarkDTO dto : marksList) {
+            // Validation
+            if (dto.getExamType() == Mark.ExamType.CIA1 && dto.getMarks() > 60) {
+                return ResponseEntity.badRequest().body("CIA1 marks cannot exceed 60");
+            }
+            if (dto.getExamType() == Mark.ExamType.CIA2 && dto.getMarks() > 60) {
+                return ResponseEntity.badRequest().body("CIA2 marks cannot exceed 60");
+            }
+            if (dto.getExamType() == Mark.ExamType.MODEL && dto.getMarks() > 100) {
+                return ResponseEntity.badRequest().body("Model exam marks cannot exceed 100");
+            }
+
             User student = userRepository.findById(dto.getStudentId()).orElse(null);
             Subject subject = subjectRepository.findById(dto.getSubjectId()).orElse(null);
             if(student != null && subject != null) {
