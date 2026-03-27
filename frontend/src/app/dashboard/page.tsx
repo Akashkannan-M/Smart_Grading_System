@@ -138,10 +138,6 @@ export default function DashboardPage() {
            {/* SUBJECT-WISE RANKING SYSTEM (MANDATORY) */}
            <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
                 {dashboardSummary.subjectRankings.map((sr: any, idx: number) => {
-                    // Filter: Staff can only see their own subject in detail
-                    const isStaffSubject = isStaff && user.name.toLowerCase().includes("aarthi") && sr.subjectName.toLowerCase().includes("cloud") || // Temporary logic, should match specifically
-                                         isStaff && sr.subjectName.toLowerCase().includes("multimedia") && user.name.toLowerCase().includes("ayyapan");
-                    
                     // Actually, I'll allow everyone to see the summary but Staff sees the input fields for theirs
                     return (
                         <div key={idx} style={{ background: 'white', borderLeft: '5px solid var(--primary-color)', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
@@ -167,20 +163,47 @@ export default function DashboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sr.ranking.map((row: any, rIdx: number) => (
-                                        <tr key={rIdx} className={row.username === user.username ? "highlight-student" : ""}>
-                                            <td style={{ fontWeight: 700, fontSize: '1.1rem' }}>
-                                                {rIdx === 0 ? "🥇" : rIdx === 1 ? "🥈" : rIdx === 2 ? "🥉" : rIdx + 1}
-                                            </td>
-                                            <td>{row.username}</td>
-                                            <td>{row.name}</td>
-                                            <td>
-                                                <div style={{ fontWeight: 700 }}>{row.marks} pts</div>
-                                                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Max possible: 220</div>
-                                            </td>
-                                            <td className={row.pass ? "status-pass" : "status-fail"}>{row.pass ? "PASS" : "FAIL"}</td>
-                                        </tr>
-                                    ))}
+                                    {sr.ranking.map((row: any, rIdx: number) => {
+                                        const isStaffForThisSubject = isStaff && (
+                                            (user.name.toLowerCase().includes("aarthi") && sr.subjectName.toLowerCase().includes("cloud")) ||
+                                            (user.name.toLowerCase().includes("ayyapan") && sr.subjectName.toLowerCase().includes("multimedia")) ||
+                                            (user.name.toLowerCase().includes("siva") && sr.subjectName.toLowerCase().includes("network")) ||
+                                            (user.name.toLowerCase().includes("suga") && sr.subjectName.toLowerCase().includes("storage")) ||
+                                            (user.name.toLowerCase().includes("elambarathi") && sr.subjectName.toLowerCase().includes("software")) ||
+                                            (user.name.toLowerCase().includes("indu") && sr.subjectName.toLowerCase().includes("embedded"))
+                                        );
+
+                                        return (
+                                            <tr key={rIdx} className={row.username === user.username ? "highlight-student" : ""}>
+                                                <td style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                                                    {rIdx === 0 ? "🥇" : rIdx === 1 ? "🥈" : rIdx === 2 ? "🥉" : rIdx + 1}
+                                                </td>
+                                                <td>{row.username}</td>
+                                                <td>{row.name}</td>
+                                                <td>
+                                                    {isStaffForThisSubject ? (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <input 
+                                                                type="number" 
+                                                                className="input-field" 
+                                                                style={{ width: '80px', height: '35px', padding: '0 8px' }}
+                                                                placeholder={examType}
+                                                                value={staffInputs[row.studentId] ?? ""}
+                                                                onChange={(e) => setStaffInputs({...staffInputs, [row.studentId]: parseInt(e.target.value)})}
+                                                            />
+                                                            <button onClick={() => handleStaffSave(sr.subjectId)} className="btn-primary" style={{ width: 'auto', padding: '4px 12px', fontSize: '0.75rem' }}>Update</button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div style={{ fontWeight: 700 }}>{row.marks} pts</div>
+                                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Max possible: 220</div>
+                                                        </>
+                                                    )}
+                                                </td>
+                                                <td className={row.pass ? "status-pass" : "status-fail"}>{row.pass ? "PASS" : "FAIL"}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                              </table>
                         </div>
