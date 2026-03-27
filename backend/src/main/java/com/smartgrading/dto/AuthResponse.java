@@ -7,15 +7,17 @@ public class AuthResponse {
     private String username;
     private String role;
     private String department;
+    private String currentYear;
 
     public AuthResponse() {}
-    public AuthResponse(String token, Long id, String name, String username, String role, String department) {
+    public AuthResponse(String token, Long id, String name, String username, String role, String department, String currentYear) {
         this.token = token;
         this.id = id;
         this.name = name;
         this.username = username;
         this.role = role;
         this.department = department;
+        this.currentYear = currentYear;
     }
 
     public String getToken() { return token; }
@@ -30,4 +32,6 @@ public class AuthResponse {
     public void setRole(String role) { this.role = role; }
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
+    public String getCurrentYear() { return currentYear; }
+    public void setCurrentYear(String currentYear) { this.currentYear = currentYear; }
 }

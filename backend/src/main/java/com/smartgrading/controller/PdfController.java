@@ -1,124 +1,96 @@
 package com.smartgrading.controller;
 
-import com.lowagie.text.*;
+import com.lowagie.text.Document;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import com.smartgrading.entity.Mark;
+import com.smartgrading.entity.Subject;
 import com.smartgrading.entity.User;
 import com.smartgrading.repository.MarkRepository;
+import com.smartgrading.repository.SubjectRepository;
+import com.smartgrading.repository.UserRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
-import java.io.ByteArrayOutputStream;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Arrays;
+import java.util.List;
 
-@RestController
+@Controller
 @RequestMapping("/api/pdf")
-@CrossOrigin(origins = "*")
 public class PdfController {
 
-    @Autowired
-    private MarkRepository markRepository;
+    @Autowired private MarkRepository markRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private SubjectRepository subjectRepository;
+
+    private static final List<String> SUBJECT_ORDER = Arrays.asList(
+        "Multimedia and Animation",
+        "Object Oriented Software Engineering",
+        "Storage Technology",
+        "Network Security",
+        "Cloud Service Management",
+        "Embedded and IoT"
+    );
 
     @GetMapping("/download")
-    public ResponseEntity<byte[]> downloadPdf(@RequestParam(required = false) String type) {
+    public void generatePdf(HttpServletResponse response) {
         try {
-            java.util.List<Mark> allMarks = markRepository.findAll();
-            
-            // Map to hold Student -> Performance Map
-            Map<User, java.util.List<Mark>> studentMarks = allMarks.stream()
-                    .collect(Collectors.groupingBy(Mark::getStudent));
+            response.setContentType("application/pdf");
+            response.setHeader("Content-Disposition", "attachment; filename=Final_Grade_Report.pdf");
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            Document document = new Document(PageSize.A4.rotate());
-            PdfWriter.getInstance(document, baos);
+            Document document = new Document(PageSize.A4.rotate()); // Landscape for wide grid
+            PdfWriter.getInstance(document, response.getOutputStream());
 
             document.open();
-            Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18);
-            Paragraph title = new Paragraph("Smart Grading System - Final Grade Sheet", titleFont);
-            title.setAlignment(Element.ALIGN_CENTER);
-            document.add(title);
-            document.add(new Paragraph(" "));
+            document.add(new Paragraph("Sudharsan Engineering College - Smart Grading HUB"));
+            document.add(new Paragraph("Final Semester Performance Grade Sheet (CIA1 / CIA2 / MODEL)"));
+            document.add(new Paragraph("\n"));
 
-            PdfPTable table = new PdfPTable(7);
+            PdfPTable table = new PdfPTable(7); // Student | Sub1 | Sub2 | Sub3 | Sub4 | Sub5 | Sub6
             table.setWidthPercentage(100);
-            table.addCell("Register Name");
-            table.addCell("CIA 1 (60)");
-            table.addCell("CIA 2 (60)");
-            table.addCell("MODEL (100)");
-            table.addCell("TOTAL (220)");
-            table.addCell("AVG %");
-            table.addCell("RANK");
 
-            java.util.List<StudentSummary> summaries = new ArrayList<>();
-            for (User student : studentMarks.keySet()) {
-                java.util.List<Mark> marks = studentMarks.get(student);
-                int c1 = getMarkValue(marks, Mark.ExamType.CIA1);
-                int c2 = getMarkValue(marks, Mark.ExamType.CIA2);
-                int md = getMarkValue(marks, Mark.ExamType.MODEL);
-                int total = c1 + c2 + md;
-                double avg = (total / 220.0) * 100.0;
-                summaries.add(new StudentSummary(student.getName(), c1, c2, md, total, avg));
+            // Headers
+            table.addCell("Student Name (Reg No)");
+            for (String sub : SUBJECT_ORDER) {
+                table.addCell(sub.split(" ")[0]); // Short names for PDF grid
             }
 
-            summaries.sort(Comparator.comparingInt(StudentSummary::getTotal).reversed());
+            List<User> students = userRepository.findByRole(User.Role.STUDENT);
+            List<Subject> subjects = subjectRepository.findAll();
+            List<Mark> allMarks = markRepository.findAll();
 
-            int passedStudents = 0;
-            double totalClassAvg = 0;
-
-            for (int i = 0; i < summaries.size(); i++) {
-                StudentSummary s = summaries.get(i);
-                table.addCell(s.name);
-                table.addCell(String.valueOf(s.c1));
-                table.addCell(String.valueOf(s.c2));
-                table.addCell(String.valueOf(s.md));
-                table.addCell(String.valueOf(s.total));
-                table.addCell(String.format("%.1f", s.avg) + "%");
-                table.addCell(String.valueOf(i + 1));
-
-                // PASS RULES: 30, 30, 45
-                if (s.c1 >= 30 && s.c2 >= 30 && s.md >= 45) passedStudents++;
-                totalClassAvg += s.avg;
+            for (User s : students) {
+                table.addCell(s.getName() + " (" + s.getUsername() + ")");
+                
+                for (String subName : SUBJECT_ORDER) {
+                    Subject subObj = subjects.stream()
+                            .filter(sub -> sub.getSubjectName().equalsIgnoreCase(subName))
+                            .findFirst().orElse(null);
+                    
+                    if (subObj != null) {
+                        List<Mark> mrks = allMarks.stream()
+                                .filter(m -> m.getStudent().getId().equals(s.getId()) && m.getSubject().getId().equals(subObj.getId()))
+                                .toList();
+                        
+                        Integer c1 = mrks.stream().filter(m -> m.getExamType() == Mark.ExamType.CIA1).map(Mark::getMarks).findFirst().orElse(0);
+                        Integer c2 = mrks.stream().filter(m -> m.getExamType() == Mark.ExamType.CIA2).map(Mark::getMarks).findFirst().orElse(0);
+                        Integer mod = mrks.stream().filter(m -> m.getExamType() == Mark.ExamType.MODEL).map(Mark::getMarks).findFirst().orElse(0);
+                        
+                        table.addCell(c1 + " | " + c2 + " | " + mod);
+                    } else {
+                        table.addCell("0 | 0 | 0");
+                    }
+                }
             }
-
             document.add(table);
-            document.add(new Paragraph(" "));
-
-            if (!summaries.isEmpty()) {
-                double avgClass = totalClassAvg / summaries.size();
-                double passRate = (passedStudents * 100.0) / summaries.size();
-                document.add(new Paragraph("FINAL ANALYTICS:"));
-                document.add(new Paragraph("Total Student Count: " + summaries.size()));
-                document.add(new Paragraph("Overall Class Average: " + String.format("%.2f", avgClass) + "%"));
-                document.add(new Paragraph("Class Pass Percentage: " + String.format("%.2f", passRate) + "%"));
-            }
-
             document.close();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDispositionFormData("filename", "final_report.pdf");
-            return ResponseEntity.ok().headers(headers).body(baos.toByteArray());
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
         }
-    }
-
-    private int getMarkValue(java.util.List<Mark> marks, Mark.ExamType type) {
-        return marks.stream().filter(m -> m.getExamType() == type).map(Mark::getMarks).findFirst().orElse(0);
-    }
-
-    private static class StudentSummary {
-        String name;
-        int c1, c2, md, total;
-        double avg;
-        StudentSummary(String n, int c1, int c2, int md, int t, double a) {
-            this.name = n; this.c1 = c1; this.c2 = c2; this.md = md; this.total = t; this.avg = a;
-        }
-        int getTotal() { return total; }
     }
 }

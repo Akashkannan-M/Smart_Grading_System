@@ -7,51 +7,34 @@ import com.smartgrading.repository.UserRepository;
 import com.smartgrading.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
+@CrossOrigin(origins = "*")
 public class AuthController {
-
-    @Autowired
-    private AuthenticationManager authenticationManager;
-
-    @Autowired
-    private JwtUtil jwtUtil;
 
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthRequest authRequest) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(authRequest.getUsername(), authRequest.getPassword())
-        );
-
-        Optional<User> userOpt = userRepository.findByUsername(authRequest.getUsername());
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            final String jwt = jwtUtil.generateToken(
-                    org.springframework.security.core.userdetails.User.withUsername(user.getUsername()).password(user.getPassword()).authorities("ROLE_" + user.getRole().name()).build(),
-                    user.getRole().name(),
-                    user.getName()
-            );
-
+    public ResponseEntity<?> login(@RequestBody AuthRequest request) {
+        User user = userRepository.findByUsername(request.getUsername());
+        if (user != null && user.getPassword().equals(request.getPassword())) {
+            String token = jwtUtil.generateToken(user.getUsername());
             return ResponseEntity.ok(new AuthResponse(
-                    jwt,
-                    user.getId(),
-                    user.getName(),
-                    user.getUsername(),
-                    user.getRole().name(),
-                    user.getDepartment()
+                token, 
+                user.getId(), 
+                user.getName(), 
+                user.getUsername(), 
+                user.getRole().toString(), 
+                user.getDepartment(),
+                user.getCurrentYear() != null ? user.getCurrentYear() : "1st Year"
             ));
         }
-
-        return ResponseEntity.badRequest().body("User not found");
+        return ResponseEntity.status(401).body("Invalid credentials.");
     }
 }

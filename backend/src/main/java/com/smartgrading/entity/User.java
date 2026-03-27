@@ -21,17 +21,21 @@ public class User {
     private Role role;
 
     private String department;
+    
+    // Restoration: Year Field for Student/HOD filtering
+    private String currentYear; 
 
     // Plain Java Boilerplate
     public User() {}
 
-    public User(Long id, String name, String username, String password, Role role, String department) {
+    public User(Long id, String name, String username, String password, Role role, String department, String currentYear) {
         this.id = id;
         this.name = name;
         this.username = username;
         this.password = password;
         this.role = role;
         this.department = department;
+        this.currentYear = currentYear;
     }
 
     public Long getId() { return id; }
@@ -46,6 +50,8 @@ public class User {
     public void setRole(Role role) { this.role = role; }
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
+    public String getCurrentYear() { return currentYear; }
+    public void setCurrentYear(String currentYear) { this.currentYear = currentYear; }
 
     public enum Role {
         HOD, CC, STAFF, STUDENT

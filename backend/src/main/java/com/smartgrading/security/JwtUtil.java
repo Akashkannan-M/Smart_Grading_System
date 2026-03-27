@@ -1,11 +1,9 @@
 package com.smartgrading.security;
 
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
+import org.springframework.security.core.userdetails.UserDetails;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
@@ -15,15 +13,11 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret}")
-    private String secret;
-
-    @Value("${jwt.expiration}")
-    private long expirationTime;
+    private String secret = "7dca8c5af7191244f77688ad7cda5eb9255a24d5b201facc951010bb150d182283ccb8830156d9be8c903dc2f9aa7eabc93b59363bc64aef2e8dc771221ac192";
+    private long expirationTime = 86400000;
 
     private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secret);
-        return Keys.hmacShaKeyFor(keyBytes);
+        return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
     public String extractUsername(String token) {
@@ -36,17 +30,18 @@ public class JwtUtil {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parser().setSigningKey(getSignInKey()).build().parseClaimsJws(token).getBody();
+        return Jwts.parser()
+                .setSigningKey(getSignInKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
     }
 
-    public String generateToken(UserDetails userDetails, String role, String name) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", role);
-        claims.put("name", name);
-        return createToken(claims, userDetails.getUsername());
+    public String generateToken(String username) {
+        return createToken(new HashMap<>(), username);
     }
 
-    private String createToken(Map<String, Object> claims, String subject) {
+    public String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
