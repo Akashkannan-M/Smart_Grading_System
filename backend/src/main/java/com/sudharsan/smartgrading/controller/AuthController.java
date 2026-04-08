@@ -66,7 +66,9 @@ public class AuthController {
                     loginRequest.getUsername(),
                     user.getName(),
                     user.getDepartment(),
-                    user.getRole()));
+                    user.getRole(),
+                    user.getEmpId(),
+                    user.getRegNo()));
                     
         } catch (BadCredentialsException e) {
             logger.error("[DEBUG] Authentication failed for user {}: Invalid username or password", loginRequest.getUsername());

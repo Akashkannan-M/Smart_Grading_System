@@ -19,37 +19,47 @@ public class DataInitializer {
 
     @Bean
     @Transactional
-    public CommandLineRunner loadData(UserRepository userRepository, 
-                                      SubjectRepository subjectRepository,
-                                      PasswordEncoder passwordEncoder) {
+    public CommandLineRunner loadData(UserRepository userRepository,
+            SubjectRepository subjectRepository,
+            PasswordEncoder passwordEncoder) {
         return args -> {
             // Helper to save or update user
-            saveOrUpdateUser(userRepository, "Sujatha", Role.HOD, "CSE", null, "HOD001", "01011980@hod", passwordEncoder);
+            saveOrUpdateUser(userRepository, "Sujatha", Role.HOD, "CSE", null, "HOD001", "01011980@hod",
+                    passwordEncoder);
             saveOrUpdateUser(userRepository, "Ayyapan", Role.CC, "CSE", null, "CC001", "01011985@cc", passwordEncoder);
-            
-            String[] staffNames = {"Aarthi", "Siva Priyanka", "Sugashini", "Elambarathi", "Indu"};
+
+            String[] staffNames = { "Aarthi", "Siva Priyanka", "Sugashini", "Elambarathi", "Indu" };
             for (int i = 0; i < staffNames.length; i++) {
-                saveOrUpdateUser(userRepository, staffNames[i], Role.STAFF, "CSE", null, "STF00" + (i + 1), "01011990@staff", passwordEncoder);
+                saveOrUpdateUser(userRepository, staffNames[i], Role.STAFF, "CSE", null, "STF00" + (i + 1),
+                        "01011990@staff", passwordEncoder);
             }
 
             for (int i = 1; i <= 25; i++) {
                 String regNo = String.format("814423104%03d", i);
-                saveOrUpdateUser(userRepository, "Student" + i, Role.STUDENT, "CSE", regNo, null, "01012003@student", passwordEncoder);
+                saveOrUpdateUser(userRepository, "Student" + i, Role.STUDENT, "CSE", regNo, null, "01012003@student",
+                        passwordEncoder);
             }
 
             // Ensure subjects exist
             if (subjectRepository.count() == 0) {
-                subjectRepository.save(new Subject("Cloud Service Management", userRepository.findByEmpId("STF001").orElse(null)));
-                subjectRepository.save(new Subject("Multimedia and Animation", userRepository.findByEmpId("CC001").orElse(null))); 
-                subjectRepository.save(new Subject("Network Security", userRepository.findByEmpId("STF002").orElse(null)));
-                subjectRepository.save(new Subject("Storage Technology", userRepository.findByEmpId("STF003").orElse(null)));
-                subjectRepository.save(new Subject("Object Oriented Software Engineering", userRepository.findByEmpId("STF004").orElse(null)));
-                subjectRepository.save(new Subject("Embedded and IoT", userRepository.findByEmpId("STF005").orElse(null)));
+                subjectRepository.save(
+                        new Subject("Cloud Service Management", userRepository.findByEmpId("STF001").orElse(null)));
+                subjectRepository.save(
+                        new Subject("Multimedia and Animation", userRepository.findByEmpId("CC001").orElse(null)));
+                subjectRepository
+                        .save(new Subject("Network Security", userRepository.findByEmpId("STF002").orElse(null)));
+                subjectRepository
+                        .save(new Subject("Storage Technology", userRepository.findByEmpId("STF003").orElse(null)));
+                subjectRepository.save(new Subject("Object Oriented Software Engineering",
+                        userRepository.findByEmpId("STF004").orElse(null)));
+                subjectRepository
+                        .save(new Subject("Embedded and IoT", userRepository.findByEmpId("STF005").orElse(null)));
             }
         };
     }
 
-    private void saveOrUpdateUser(UserRepository repo, String name, Role role, String dept, String regNo, String empId, String rawPassword, PasswordEncoder encoder) {
+    private void saveOrUpdateUser(UserRepository repo, String name, Role role, String dept, String regNo, String empId,
+            String rawPassword, PasswordEncoder encoder) {
         User user = null;
         if (empId != null) {
             user = repo.findByEmpId(empId).orElse(null);

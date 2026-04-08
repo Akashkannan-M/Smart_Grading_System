@@ -19,7 +19,7 @@ public class UserController {
 
     @GetMapping("/students")
     public List<User> getAllStudents() {
-        return userRepository.findByRole(Role.STUDENT);
+        return userRepository.findByRoleOrderByRegNoAsc(Role.STUDENT);
     }
 
     @GetMapping("/stats")

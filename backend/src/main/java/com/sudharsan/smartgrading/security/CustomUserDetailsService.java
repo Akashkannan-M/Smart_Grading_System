@@ -33,6 +33,12 @@ public class CustomUserDetailsService implements UserDetailsService {
             user = userRepository.findByEmpId(username).orElse(null);
             if (user != null) {
                 logger.info("User found by employee ID: {}", username);
+            } else {
+                // Try Name
+                user = userRepository.findFirstByName(username).orElse(null);
+                if (user != null) {
+                    logger.info("User found by name: {}", username);
+                }
             }
         }
         
@@ -41,8 +47,11 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("User not found with username: " + username);
         }
 
+        // Must use the FOUND user's regNo or empId or name as the primary Spring ID to avoid token conflicts if they typed 'Ayyapan'
+        String principalName = user.getRegNo() != null ? user.getRegNo() : (user.getEmpId() != null ? user.getEmpId() : user.getName());
+
         return new org.springframework.security.core.userdetails.User(
-                username,
+                principalName,
                 user.getPassword(),
                 Collections.singleton(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         );

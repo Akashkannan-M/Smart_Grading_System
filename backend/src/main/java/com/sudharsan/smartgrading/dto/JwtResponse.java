@@ -9,14 +9,18 @@ public class JwtResponse {
     private String name;
     private String department;
     private Role role;
+    private String empId;
+    private String regNo;
 
-    public JwtResponse(String token, Long id, String username, String name, String department, Role role) {
+    public JwtResponse(String token, Long id, String username, String name, String department, Role role, String empId, String regNo) {
         this.token = token;
         this.id = id;
         this.username = username;
         this.name = name;
         this.department = department;
         this.role = role;
+        this.empId = empId;
+        this.regNo = regNo;
     }
 
     public String getToken() { return token; }
@@ -31,4 +35,8 @@ public class JwtResponse {
     public void setDepartment(String department) { this.department = department; }
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
+    public String getEmpId() { return empId; }
+    public void setEmpId(String empId) { this.empId = empId; }
+    public String getRegNo() { return regNo; }
+    public void setRegNo(String regNo) { this.regNo = regNo; }
 }
