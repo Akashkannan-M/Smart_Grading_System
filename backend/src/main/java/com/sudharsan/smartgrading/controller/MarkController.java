@@ -28,7 +28,18 @@ public class MarkController {
     private SubjectRepository subjectRepository;
 
     @GetMapping
-    public List<Mark> getAllMarks() {
+    public List<Mark> getAllMarks(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) String examType) {
+        
+        System.out.println("DEBUG: subjectId=" + subjectId + ", examType=" + examType);
+        
+        if (subjectId != null) {
+            List<Mark> filtered = markRepository.findBySubjectId(subjectId);
+            System.out.println("DEBUG: Found " + filtered.size() + " records for subject");
+            return filtered;
+        }
+        System.out.println("DEBUG: Fetching all marks (no filter)");
         return markRepository.findAll();
     }
 
@@ -45,10 +56,7 @@ public class MarkController {
         Subject subject = subjectRepository.findById(markDto.getSubjectId())
                 .orElseThrow(() -> new RuntimeException("Subject not found"));
 
-        List<Mark> existingMarks = markRepository.findByStudentId(student.getId());
-        Optional<Mark> existingMarkOpt = existingMarks.stream()
-                .filter(m -> m.getSubject().getId().equals(subject.getId()))
-                .findFirst();
+        Optional<Mark> existingMarkOpt = markRepository.findByStudentIdAndSubjectId(student.getId(), subject.getId());
 
         Mark mark;
         if (existingMarkOpt.isPresent()) {
@@ -59,10 +67,35 @@ public class MarkController {
             mark.setSubject(subject);
         }
         
-        mark.setCia1(markDto.getCia1() != null ? markDto.getCia1() : mark.getCia1());
-        mark.setCia2(markDto.getCia2() != null ? markDto.getCia2() : mark.getCia2());
-        mark.setModelExam(markDto.getModelExam() != null ? markDto.getModelExam() : mark.getModelExam());
+        // Validation (Requirement 3: CIA1/2 max 60, Model max 100)
+        validateMark(markDto.getCia1(), 60, "CIA1");
+        validateMark(markDto.getCia2(), 60, "CIA2");
+        validateMark(markDto.getModelExam(), 100, "Model exam");
 
+        // Requirement 1: Store as "-" if empty
+        mark.setCia1(formatMark(markDto.getCia1()));
+        mark.setCia2(formatMark(markDto.getCia2()));
+        mark.setModelExam(formatMark(markDto.getModelExam()));
+
+        mark.calculateTotalAndResult();
+        
         return markRepository.save(mark);
+    }
+
+    private void validateMark(String mark, int max, String label) {
+        if (mark == null || mark.trim().isEmpty() || mark.equals("-") || mark.equals("AB")) return;
+        try {
+            int val = Integer.parseInt(mark.trim());
+            if (val > max) {
+                throw new RuntimeException(label + " marks cannot exceed " + max);
+            }
+        } catch (NumberFormatException e) {
+             throw new RuntimeException("Invalid numeric value for " + label);
+        }
+    }
+
+    private String formatMark(String val) {
+        if (val == null || val.trim().isEmpty()) return "-"; // Requirement 1
+        return val.trim().toUpperCase(); // Handle AB or numeric
     }
 }

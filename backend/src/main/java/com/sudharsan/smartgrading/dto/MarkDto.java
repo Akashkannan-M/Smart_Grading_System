@@ -3,9 +3,9 @@ package com.sudharsan.smartgrading.dto;
 public class MarkDto {
     private Long studentId;
     private Long subjectId;
-    private Integer cia1;
-    private Integer cia2;
-    private Integer modelExam;
+    private String cia1;
+    private String cia2;
+    private String modelExam;
 
     public MarkDto() {}
 
@@ -13,10 +13,10 @@ public class MarkDto {
     public void setStudentId(Long studentId) { this.studentId = studentId; }
     public Long getSubjectId() { return subjectId; }
     public void setSubjectId(Long subjectId) { this.subjectId = subjectId; }
-    public Integer getCia1() { return cia1; }
-    public void setCia1(Integer cia1) { this.cia1 = cia1; }
-    public Integer getCia2() { return cia2; }
-    public void setCia2(Integer cia2) { this.cia2 = cia2; }
-    public Integer getModelExam() { return modelExam; }
-    public void setModelExam(Integer modelExam) { this.modelExam = modelExam; }
+    public String getCia1() { return cia1; }
+    public void setCia1(String cia1) { this.cia1 = cia1; }
+    public String getCia2() { return cia2; }
+    public void setCia2(String cia2) { this.cia2 = cia2; }
+    public String getModelExam() { return modelExam; }
+    public void setModelExam(String modelExam) { this.modelExam = modelExam; }
 }

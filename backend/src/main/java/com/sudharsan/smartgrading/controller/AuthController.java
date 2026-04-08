@@ -49,21 +49,27 @@ public class AuthController {
             logger.info("[DEBUG] Authentication successful for user: {}", loginRequest.getUsername());
             SecurityContextHolder.getContext().setAuthentication(authentication);
             
-            String jwt = jwtService.generateToken(loginRequest.getUsername());
-
-            // Get user info to return in response
+            // Get user info to return in response - ensure we use the same flexible lookup as the service
             User user = userRepository.findByRegNo(loginRequest.getUsername())
                     .orElseGet(() -> userRepository.findByEmpId(loginRequest.getUsername())
-                            .orElseThrow(() -> {
-                                logger.error("[DEBUG] User not found in database after successful authentication: {}", loginRequest.getUsername());
-                                return new UsernameNotFoundException("User Not Found");
-                            }));
+                            .orElseGet(() -> userRepository.findFirstByName(loginRequest.getUsername())
+                                    .orElseThrow(() -> {
+                                        logger.error("[DEBUG] User not found in database after successful authentication: {}", loginRequest.getUsername());
+                                        return new UsernameNotFoundException("User Not Found");
+                                    })));
+
+            // Generate token using the canonical identity (RegNo or EmpId or Name) 
+            // This MUST match what CustomUserDetailsService uses as the principal
+            String canonicalUsername = user.getRegNo() != null ? user.getRegNo() : 
+                                      (user.getEmpId() != null ? user.getEmpId() : user.getName());
+            
+            String jwt = jwtService.generateToken(canonicalUsername);
 
             logger.info("[DEBUG] JWT generated and returning response for user: {}", loginRequest.getUsername());
 
             return ResponseEntity.ok(new JwtResponse(jwt,
                     user.getId(),
-                    loginRequest.getUsername(),
+                    canonicalUsername,
                     user.getName(),
                     user.getDepartment(),
                     user.getRole(),
