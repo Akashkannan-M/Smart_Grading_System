@@ -49,7 +49,7 @@ public class MarkController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('STAFF') or hasRole('CC')")
+    @PreAuthorize("hasRole('STAFF')")
     public Mark saveOrUpdateMark(@RequestBody MarkDto markDto) {
         User student = userRepository.findById(markDto.getStudentId())
                 .orElseThrow(() -> new RuntimeException("Student not found"));
@@ -67,15 +67,21 @@ public class MarkController {
             mark.setSubject(subject);
         }
         
-        // Validation (Requirement 3: CIA1/2 max 60, Model max 100)
-        validateMark(markDto.getCia1(), 60, "CIA1");
-        validateMark(markDto.getCia2(), 60, "CIA2");
-        validateMark(markDto.getModelExam(), 100, "Model exam");
+        // Validation
+        if (markDto.getCia1() != null) validateMark(markDto.getCia1(), 60, "CIA1");
+        if (markDto.getCia2() != null) validateMark(markDto.getCia2(), 60, "CIA2");
+        if (markDto.getModelExam() != null) validateMark(markDto.getModelExam(), 100, "Model exam");
 
-        // Requirement 1: Store as "-" if empty
-        mark.setCia1(formatMark(markDto.getCia1()));
-        mark.setCia2(formatMark(markDto.getCia2()));
-        mark.setModelExam(formatMark(markDto.getModelExam()));
+        // Requirement 2 & 3: Safe Update (Only update if passed)
+        if (markDto.getCia1() != null && !markDto.getCia1().trim().isEmpty()) {
+            mark.setCia1(markDto.getCia1().trim().toUpperCase());
+        }
+        if (markDto.getCia2() != null && !markDto.getCia2().trim().isEmpty()) {
+            mark.setCia2(markDto.getCia2().trim().toUpperCase());
+        }
+        if (markDto.getModelExam() != null && !markDto.getModelExam().trim().isEmpty()) {
+            mark.setModelExam(markDto.getModelExam().trim().toUpperCase());
+        }
 
         mark.calculateTotalAndResult();
         

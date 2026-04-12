@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.sudharsan.smartgrading.model.Mark;
 import com.sudharsan.smartgrading.repository.MarkRepository;
@@ -30,17 +31,13 @@ public class DataInitializer {
             seedUsers(userRepository, passwordEncoder);
             seedSubjects(subjectRepository, userRepository);
 
-            // Existing mark conversion (Scale from 100 to 60)
-            // Note: This logic assumes marks > 60 are definitely on a 100-point scale.
-            // For marks <= 60, it's ambiguous, but we will scale those too if needed.
-            // To prevent re-running this every time, you might want to remove it after one
-            // successful run.
+            /* Commented out as it blocks startup on large datasets
             List<Mark> allMarks = markRepository.findAll();
             for (Mark mark : allMarks) {
                 boolean changed = false;
 
                 String c1 = mark.getCia1();
-                if (isNumeric(c1) && Integer.parseInt(c1) > 60) { // Heuristic: definitely needs scaling
+                if (isNumeric(c1) && Integer.parseInt(c1) > 60) {
                     mark.setCia1(scaleMark(c1));
                     changed = true;
                 }
@@ -55,6 +52,7 @@ public class DataInitializer {
                     markRepository.save(mark);
                 }
             }
+            */
         };
     }
 
@@ -62,7 +60,7 @@ public class DataInitializer {
         saveOrUpdateUser(userRepository, "Sujatha", Role.HOD, "CSE", null, "HOD001", "01011980@hod", passwordEncoder);
         saveOrUpdateUser(userRepository, "Ayyapan", Role.CC, "CSE", null, "CC001", "01011985@cc", passwordEncoder);
 
-        String[] staffNames = { "Aarthi", "Siva Priyanka", "Sugashini", "Elambarathi", "Indu" };
+        String[] staffNames = { "Aarthi", "Siva Priyanka", "Sugashini", "Elambarathi", "Indu", "Ayyapan" };
         for (int i = 0; i < staffNames.length; i++) {
             saveOrUpdateUser(userRepository, staffNames[i], Role.STAFF, "CSE", null, "STF00" + (i + 1),
                     "01011990@staff", passwordEncoder);
@@ -76,18 +74,18 @@ public class DataInitializer {
     }
 
     private void seedSubjects(SubjectRepository subjectRepository, UserRepository userRepository) {
-        if (subjectRepository.count() == 0) {
-            subjectRepository
-                    .save(new Subject("Cloud Service Management", userRepository.findByEmpId("STF001").orElse(null)));
-            subjectRepository
-                    .save(new Subject("Multimedia and Animation", userRepository.findByEmpId("CC001").orElse(null)));
-            subjectRepository.save(new Subject("Network Security", userRepository.findByEmpId("STF002").orElse(null)));
-            subjectRepository
-                    .save(new Subject("Storage Technology", userRepository.findByEmpId("STF003").orElse(null)));
-            subjectRepository.save(new Subject("Object Oriented Software Engineering",
-                    userRepository.findByEmpId("STF004").orElse(null)));
-            subjectRepository.save(new Subject("Embedded and IoT", userRepository.findByEmpId("STF005").orElse(null)));
-        }
+        updateOrSaveSubject(subjectRepository, "Cloud Service Management", "STF001", userRepository);
+        updateOrSaveSubject(subjectRepository, "Multimedia and Animation", "STF006", userRepository);
+        updateOrSaveSubject(subjectRepository, "Network Security", "STF002", userRepository);
+        updateOrSaveSubject(subjectRepository, "Storage Technology", "STF003", userRepository);
+        updateOrSaveSubject(subjectRepository, "Object Oriented Software Engineering", "STF004", userRepository);
+        updateOrSaveSubject(subjectRepository, "Embedded and IoT", "STF005", userRepository);
+    }
+
+    private void updateOrSaveSubject(SubjectRepository repo, String name, String empId, UserRepository userRepo) {
+        Subject s = repo.findByName(name).orElse(new Subject(name, null));
+        s.setStaff(userRepo.findByEmpId(empId).orElse(null));
+        repo.save(s);
     }
 
     private boolean isNumeric(String str) {
